@@ -1,0 +1,29 @@
+# Python
+venv/
+.venv*/
+env*/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.dist-info/
+build/
+dist/
+.coverage*
+.pytest_cache/
+.mypy_cache/
+.cache/
+
+# Node / Vite / React
+node_modules/
+dist/
+*.local
+.vercel/
+
+# OS / env
+.DS_Store
+.env
+*.env
+
