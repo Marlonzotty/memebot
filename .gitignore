@@ -1,43 +1,31 @@
+cat > .gitignore <<'EOF'
 # Python
 venv/
-.venv*/
-env*/
+.env
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*.so
-*.egg-info/
-.dist-info/
-build/
-dist/
-.coverage*
-.pytest_cache/
+*.pyc
 .mypy_cache/
+.pytest_cache/
+dist/
+build/
+
+# Node / Frontend
+node_modules/
 .cache/
-
-# Node / Vite / React
-node_modules/
+.next/
+out/
 dist/
-*.local
-.vercel/
+build/
+*.log
 
-# OS / env
-.DS_Store
-.env
-*.env
+# Playwright / drivers / browsers baixados
+playwright/.cache/
+**/playwright/.cache/
+**/playwright/driver/
+EOF
 
-venv/
-node_modules/
-**/__pycache__/
-dist/
-.vercel/
-.env
-*.env
-venv/
-node_modules/
-**/__pycache__/
-dist/
-.vercel/
-.env
-*.env
+# Desindexar caso ainda estejam rastreados
+git rm -r --cached venv node_modules 2>/dev/null || true
+git add .gitignore
+git commit -m "chore: ignore venv & node_modules"
+git push origin main
