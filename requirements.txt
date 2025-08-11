@@ -5,5 +5,8 @@ python-dotenv>=1.0
 requests>=2.31
 openai>=1.10
 typing_extensions>=4.8
-# opcional: se o mac mostrar NotOpenSSLWarning do urllib3, fixe abaixo
-# urllib3<2
+
+# Scraping
+playwright>=1.44
+# Se você usa recursos anti-bot:
+playwright-stealth>=1.0
