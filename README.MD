@@ -85,5 +85,7 @@ readme_path.name
 
 Sempre exibir os detalhes
 
-Resultado
-'README.md'
+Solscan → puxa meta + holders (dados on-chain)
+Birdeye → puxa mercado + liquidez + volume
+Normalizador → une tudo num snapshot único
+Rotas → permitem consultar snapshot cru ou já analisado pelo GP

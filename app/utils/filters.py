@@ -1,14 +1,14 @@
+# app/utils/filters.py
 from typing import Dict, Optional, List
 import re
-from app.services.dex_api import get_token_profiles
 
-# ---------------------- Parâmetros configuráveis ---------------------- #
+# ---------- thresholds (afrouxe conforme necessário) ----------
 MAX_TOKEN_AGE_SECONDS = 30 * 24 * 60 * 60  # 30 dias
-MIN_VOLUME_USD = 100
-MIN_BUYERS_24H = 0
-MIN_BUY_SELL_RATIO = 1.0
+MIN_VOLUME_USD       = 100.0
+MIN_BUYERS_24H       = 5
+MIN_BUY_SELL_RATIO   = 1.0
 
-REQUIRED_LINK_TYPES = {"twitter", "telegram", "website"}
+REQUIRED_LINK_TYPES = {"twitter", "telegram", "website", "discord", "x"}
 BLACKLIST_PATTERNS = [
     re.compile(r"\btest\b", re.I),
     re.compile(r"\brug\b", re.I),
@@ -18,97 +18,101 @@ BLACKLIST_PATTERNS = [
     re.compile(r"\bdev\s+is\s+gone\b", re.I),
 ]
 
-# ---------------------- Funções de checagem ---------------------- #
-def is_recent(token: Dict) -> bool:
+def _to_int(x, default=0) -> int:
     try:
-        age = int(token.get("age", {}).get("seconds", 99999999))
-        return age < MAX_TOKEN_AGE_SECONDS
-    except:
-        return False
+        return int(x)
+    except Exception:
+        try:
+            return int(float(x))
+        except Exception:
+            return default
 
-def has_good_volume(token: Dict) -> bool:
+def _to_float(x, default=0.0) -> float:
     try:
-        return float(token.get("volume", {}).get("h24", 0)) > MIN_VOLUME_USD
-    except:
-        return False
+        return float(x)
+    except Exception:
+        return default
 
-def has_official_links(token: Dict) -> bool:
+# ---------- checks retornam True/False/None (desconhecido) ----------
+def is_recent(t: Dict) -> Optional[bool]:
     try:
-        links = token.get("links", [])
-        return any(link.get("type", "").lower() in REQUIRED_LINK_TYPES for link in links)
+        age = (t.get("age") or {}).get("seconds")
+        if age is None: return None
+        return int(age) < MAX_TOKEN_AGE_SECONDS
     except:
-        return False
+        return None
 
-def has_active_buyers(token: Dict) -> bool:
-    try:
-        return int(token.get("txns", {}).get("h24", {}).get("buys", 0)) >= MIN_BUYERS_24H
-    except:
-        return False
+def has_good_volume(t: Dict) -> Optional[bool]:
+    v = (t.get("volume") or {}).get("h24")
+    if v is None: return None
+    return _to_float(v) > MIN_VOLUME_USD
 
-def has_good_buy_sell_ratio(token: Dict) -> bool:
-    try:
-        buys = int(token.get("txns", {}).get("h24", {}).get("buys", 0))
-        sells = int(token.get("txns", {}).get("h24", {}).get("sells", 1))  # evita divisão por zero
-        return (buys / sells) >= MIN_BUY_SELL_RATIO
-    except:
-        return False
+def has_official_links(t: Dict) -> Optional[bool]:
+    links = t.get("links") or []
+    if links is None: return None
+    for link in links:
+        typ = (link.get("type") or link.get("label") or "").lower()
+        if typ in REQUIRED_LINK_TYPES and link.get("url"):
+            return True
+    return False
 
-def has_clean_description(token: Dict) -> bool:
-    try:
-        description = (token.get("description") or "")
-        return not any(pattern.search(description) for pattern in BLACKLIST_PATTERNS)
-    except:
-        return False
+def has_active_buyers(t: Dict) -> Optional[bool]:
+    buys = ((t.get("txns") or {}).get("h24") or {}).get("buys")
+    if buys is None: return None
+    return _to_int(buys) >= MIN_BUYERS_24H
 
-# ---------------------- Avaliação principal ---------------------- #
-def evaluate_token(token: Dict) -> Optional[Dict]:
+def has_good_buy_sell_ratio(t: Dict) -> Optional[bool]:
+    h24 = (t.get("txns") or {}).get("h24") or {}
+    buys = h24.get("buys"); sells = h24.get("sells")
+    if buys is None and sells is None: return None
+    buys = _to_int(buys, 0); sells = _to_int(sells, 0)
+    if sells == 0:
+        return True if buys > 0 else None
+    return (buys / max(1, sells)) >= MIN_BUY_SELL_RATIO
+
+def has_clean_description(t: Dict) -> Optional[bool]:
+    desc = t.get("description")
+    if desc is None: return None
+    return not any(p.search(desc) for p in BLACKLIST_PATTERNS)
+
+# ---------- avaliação principal ----------
+def evaluate_token(t: Dict) -> Optional[Dict]:
     checks = {
-        "idade": is_recent(token),
-        "volume": has_good_volume(token),
-        "links": has_official_links(token),
-        "compradores": has_active_buyers(token),
-        "buy_sell_ratio": has_good_buy_sell_ratio(token),
-        "descricao": has_clean_description(token),
+        "idade":          is_recent(t),
+        "volume":         has_good_volume(t),
+        "links":          has_official_links(t),
+        "compradores":    has_active_buyers(t),
+        "buy_sell_ratio": has_good_buy_sell_ratio(t),
+        "descricao":      has_clean_description(t),
     }
+    passed   = [k for k,v in checks.items() if v is True]
+    failed   = [k for k,v in checks.items() if v is False]
+    unknown  = [k for k,v in checks.items() if v is None]
 
-    passed = [k for k, v in checks.items() if v]
-    failed = [k for k, v in checks.items() if not v]
+    # reprova se descrição suja
+    if "descricao" in failed:
+        status = "rejected"
+    else:
+        status = "ok" if len(passed) >= 3 else ("partial" if len(passed) >= 2 else "rejected")
 
-    status = "ok" if len(passed) == len(checks) else "partial" if len(passed) >= 3 else "rejected"
-
-    print(
-        f"🔎 {token.get('symbol', '???')}: idade={token.get('age', {}).get('seconds')}s | "
-        f"volume=${token.get('volume', {}).get('h24')} | "
-        f"buys={token.get('txns', {}).get('h24', {}).get('buys')} | "
-        f"sells={token.get('txns', {}).get('h24', {}).get('sells')} | "
-        f"status={status} | falhou em: {failed}"
-    )
+    sym = t.get("symbol") or "???"
+    age = (t.get("age") or {}).get("seconds")
+    vol = (t.get("volume") or {}).get("h24")
+    h24 = (t.get("txns") or {}).get("h24") or {}
+    print(f"🔎 {sym}: idade={age} | volume=${vol} | buys={h24.get('buys')} | sells={h24.get('sells')} | "
+          f"status={status} | passou={passed} | falhou={failed} | desconhecido={unknown}")
 
     if status == "rejected":
         return None
 
-    return {
-        "status": status,
-        "passed": passed,
-        "failed": failed,
-        "token": {
-            "symbol": token.get("symbol"),
-            "name": token.get("name"),
-            "address": token.get("address"),
-            "chain": token.get("chainId"),
-            "age_sec": token.get("age", {}).get("seconds"),
-            "volume_usd": token.get("volume", {}).get("h24"),
-            "buys": token.get("txns", {}).get("h24", {}).get("buys", 0),
-            "sells": token.get("txns", {}).get("h24", {}).get("sells", 0),
-            "links": token.get("links", []),
-            "description": token.get("description", ""),
-        },
-    }
+    # Anexa metadados de avaliação para a rota popular o seu modelo
+    t["__eval__"] = {"status": status, "failed": failed}
+    return t
 
 def filter_tokens(tokens: List[Dict]) -> List[Dict]:
-    return [result for token in tokens if (result := evaluate_token(token))]
-
-# ---------------------- Função final de entrada ---------------------- #
-def get_filtered_token_profiles() -> List[Dict]:
-    raw_tokens = get_token_profiles()
-    return filter_tokens(raw_tokens)
+    out: List[Dict] = []
+    for tk in tokens:
+        r = evaluate_token(tk)
+        if r:
+            out.append(r)
+    return out

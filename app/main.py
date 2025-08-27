@@ -1,20 +1,24 @@
-# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import signals
+from app.routers.signals import router as signals_router
+from app.routers import links
+from app.routers import tokens
 
 app = FastAPI(title="MemeBot API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",                 # dev local
-        "https://crypto-green-two.vercel.app",   # seu front em produção
-    ],
-    allow_origin_regex=r"^https://.*\.vercel\.app$",  # previews da Vercel
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(signals.router)
+app.include_router(signals_router)
+app.include_router(links.router)
+app.include_router(tokens.router)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
