@@ -9,7 +9,10 @@ app = FastAPI(title="MemeBot API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[
+        "http://localhost:5173",  # ambiente local
+        "https://crypto-green-two.vercel.app",  # produção
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
